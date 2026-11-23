@@ -1,0 +1,29 @@
+# Ambiente virtual
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Banco de dados com as leituras (gerado automaticamente)
+*.db
+*.db-journal
+*.sqlite3
+
+# Segredos e configurações locais (chave da API, etc.)
+.env
+.env.*
+
+# Editores e sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log

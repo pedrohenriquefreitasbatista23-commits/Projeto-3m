@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Irrigação inteligente</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --fundo: #e8eee9;
+    --painel: #f6f9f6;
+    --tinta: #1d2a23;
+    --tinta-suave: #52645a;
+    --linha: #c9d6cd;
+    --agua: #0b7ea6;
+    --folha: #3c7a4e;
+    --solo: #7b5a3a;
+    --erro: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fundo: #141b17;
+      --painel: #1b251f;
+      --tinta: #e4ece6;
+      --tinta-suave: #98aa9f;
+      --linha: #2d3c33;
+      --agua: #4cb7de;
+      --folha: #6dbb82;
+      --solo: #b48a5f;
+      --erro: #f2867f;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--fundo);
+    color: var(--tinta);
+    font-family: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  .pagina { max-width: 1100px; margin: 0 auto; padding: 24px 20px 56px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  h1 { font-size: 1.6rem; font-weight: 800; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 12px; }
+  .estado { color: var(--tinta-suave); font-size: .95rem; display: flex; align-items: center; gap: 8px; }
+  .ponto { width: 10px; height: 10px; border-radius: 50%; background: var(--erro); }
+  .ponto.on { background: var(--folha); }
+
+  .grade { display: grid; grid-template-columns: 300px 1fr; gap: 16px; }
+  .bloco { background: var(--painel); border: 1px solid var(--linha); border-radius: 10px; padding: 18px; }
+  .abaixo { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+
+  /* perfil do solo: a faixa ideal e a leitura atual */
+  .solo { display: flex; gap: 18px; align-items: stretch; }
+  .coluna { position: relative; width: 64px; height: 260px; border-radius: 8px; overflow: hidden; border: 1px solid var(--linha); flex: none; }
+  .zona { position: absolute; left: 0; right: 0; }
+  .zona.seca { bottom: 0; background: var(--solo); opacity: .55; }
+  .zona.ideal { background: var(--folha); opacity: .55; }
+  .zona.encharcada { top: 0; background: var(--agua); opacity: .55; }
+  .marcador { position: absolute; left: -2px; right: -2px; height: 4px; background: var(--tinta); transition: bottom .6s ease; }
+  .leitura { display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+  .numero { font-size: 3.4rem; font-weight: 800; line-height: 1; letter-spacing: -0.03em; }
+  .numero small { font-size: 1.4rem; font-weight: 600; margin-left: 2px; }
+  .rotulo { color: var(--tinta-suave); font-size: .92rem; }
+  .legenda { display: grid; gap: 4px; margin-top: 8px; font-size: .88rem; color: var(--tinta-suave); }
+  .legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+
+  .grafico { position: relative; height: 320px; }
+  .resumo { display: flex; gap: 28px; flex-wrap: wrap; margin-top: 14px; }
+  .resumo div { min-width: 120px; }
+  .resumo b { display: block; font-size: 1.25rem; font-weight: 600; }
+
+  /* controles */
+  .segmentos { display: inline-flex; border: 1px solid var(--linha); border-radius: 8px; overflow: hidden; margin-bottom: 14px; }
+  .segmentos button { border: 0; background: transparent; color: var(--tinta); padding: 9px 16px; font: inherit; cursor: pointer; }
+  .segmentos button[aria-pressed="true"] { background: var(--folha); color: #fff; }
+  .acoes { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn { font: inherit; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--linha); background: transparent; color: var(--tinta); cursor: pointer; }
+  .btn.primario { background: var(--agua); border-color: var(--agua); color: #fff; font-weight: 600; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--agua); outline-offset: 2px; }
+  .aviso { margin: 12px 0 0; color: var(--tinta-suave); font-size: .92rem; min-height: 1.4em; }
+  .aviso.erro { color: var(--erro); }
+
+  form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  label { display: grid; gap: 4px; font-size: .9rem; color: var(--tinta-suave); }
+  input[type=number] { font: inherit; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--linha); background: var(--fundo); color: var(--tinta); width: 100%; }
+  form .largo { grid-column: 1 / -1; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .93rem; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--linha); }
+  th { font-weight: 600; color: var(--tinta-suave); }
+  .vazio { color: var(--tinta-suave); padding: 8px 0; }
+
+  @media (max-width: 860px) {
+    .grade, .abaixo { grid-template-columns: 1fr; }
+    form { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { .marcador { transition: none; } }
+</style>
+</head>
+<body>
+<div class="pagina">
+  <header>
+    <h1>Irrigação inteligente</h1>
+    <div class="estado"><span class="ponto" id="ponto"></span><span id="estado">Conectando…</span></div>
+  </header>
+
+  <section class="grade">
+    <div class="bloco">
+      <h2>Umidade do solo</h2>
+      <div class="solo">
+        <div class="coluna" aria-hidden="true">
+          <div class="zona encharcada" id="zEnc"></div>
+          <div class="zona ideal" id="zIdeal"></div>
+          <div class="zona seca" id="zSeca"></div>
+          <div class="marcador" id="marcador" style="bottom:0"></div>
+        </div>
+        <div class="leitura">
+          <div class="numero"><span id="valor">--</span><small>%</small></div>
+          <div class="rotulo" id="situacao">Aguardando a primeira leitura</div>
+          <div class="legenda">
+            <span><i style="background:var(--agua)"></i>Encharcado</span>
+            <span><i style="background:var(--folha)"></i>Faixa ideal</span>
+            <span><i style="background:var(--solo)"></i>Seco, irriga</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bloco">
+      <h2>Últimas 24 horas</h2>
+      <div class="grafico"><canvas id="grafico" aria-label="Gráfico da umidade do solo nas últimas 24 horas" role="img"></canvas></div>
+      <div class="resumo">
+        <div><span class="rotulo">Chega no mínimo em</span><b id="previsao">--</b></div>
+        <div><span class="rotulo">Irrigações em 24 h</span><b id="nIrr">--</b></div>
+        <div><span class="rotulo">Água usada em 24 h</span><b id="litros">--</b></div>
+        <div><span class="rotulo">Última irrigação</span><b id="ultIrr">--</b></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="abaixo">
+    <div class="bloco">
+      <h2>Controle da bomba</h2>
+      <div class="segmentos" role="group" aria-label="Modo de operação">
+        <button type="button" id="mAuto" aria-pressed="false">Automático</button>
+        <button type="button" id="mManual" aria-pressed="false">Manual</button>
+      </div>
+      <div class="acoes">
+        <button type="button" class="btn primario" id="btnLigar">Irrigar agora</button>
+        <button type="button" class="btn" id="btnParar">Parar irrigação</button>
+      </div>
+      <p class="aviso" id="avisoComando"></p>
+    </div>
+
+    <div class="bloco">
+      <h2>Configuração</h2>
+      <form id="formConfig">
+        <label>Umidade mínima (%)<input type="number" name="umidade_min" min="0" max="100" step="1" required></label>
+        <label>Umidade máxima (%)<input type="number" name="umidade_max" min="0" max="100" step="1" required></label>
+        <label>Duração da irrigação (s)<input type="number" name="duracao_s" min="1" max="600" step="1" required></label>
+        <label>Espera entre irrigações (min)<input type="number" name="intervalo_min" min="0" step="1" required></label>
+        <label>Vazão da bomba (L/min)<input type="number" name="vazao_l_min" min="0.1" step="0.1" required></label>
+        <span></span>
+        <label>Sensor seco (leitura bruta)<input type="number" name="raw_seco" step="1" required></label>
+        <label>Sensor na água (leitura bruta)<input type="number" name="raw_molhado" step="1" required></label>
+        <div class="largo acoes">
+          <button type="submit" class="btn primario">Salvar configuração</button>
+        </div>
+        <p class="aviso largo" id="avisoConfig"></p>
+      </form>
+    </div>
+  </section>
+
+  <section class="bloco" style="margin-top:16px">
+    <h2>Histórico de irrigações</h2>
+    <div id="historico"><p class="vazio">Nenhuma irrigação registrada ainda.</p></div>
+  </section>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let grafico = null;
+let configCarregada = false;
+
+async function api(url, opcoes) {
+  const r = await fetch(url, opcoes);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.erro || "Erro na requisição");
+  return j;
+}
+const post = (url, corpo) => api(url, {
+  method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo),
+});
+
+function hora(ts) {
+  return new Date(ts * 1000).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+function duracaoCurta(segundos) {
+  if (segundos < 60) return Math.round(segundos) + " s";
+  const m = Math.floor(segundos / 60), s = Math.round(segundos % 60);
+  return s ? `${m} min ${s} s` : `${m} min`;
+}
+function horasParaTexto(h) {
+  if (h === null || h === undefined) return "Sem tendência de queda";
+  if (h <= 0) return "Já está no mínimo";
+  const min = Math.round(h * 60);
+  return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${min % 60} min`;
+}
+
+function desenharPerfil(umid, cfg) {
+  $("#zSeca").style.height = cfg.umidade_min + "%";
+  $("#zIdeal").style.bottom = cfg.umidade_min + "%";
+  $("#zIdeal").style.height = (cfg.umidade_max - cfg.umidade_min) + "%";
+  $("#zEnc").style.height = (100 - cfg.umidade_max) + "%";
+  if (umid !== null) {
+    const pos = Math.max(0, Math.min(100, umid));
+    $("#marcador").style.bottom = `calc(${pos}% - 2px)`;
+  }
+}
+
+function preencherConfig(cfg) {
+  const f = $("#formConfig");
+  f.umidade_min.value = cfg.umidade_min;
+  f.umidade_max.value = cfg.umidade_max;
+  f.duracao_s.value = cfg.duracao_s;
+  f.intervalo_min.value = Math.round(cfg.intervalo_min_s / 60);
+  f.vazao_l_min.value = cfg.vazao_l_min;
+  f.raw_seco.value = cfg.raw_seco;
+  f.raw_molhado.value = cfg.raw_molhado;
+  configCarregada = true;
+}
+
+async function atualizarStatus() {
+  const st = await api("/api/status");
+  const cfg = st.config;
+  const idade = st.leitura ? st.agora - st.leitura.ts : null;
+
+  $("#ponto").classList.toggle("on", st.online);
+  $("#estado").textContent = st.leitura
+    ? (st.online ? `Sensor online, última leitura há ${idade} s` : `Sensor sem enviar dados desde ${hora(st.leitura.ts)}`)
+    : "Nenhuma leitura recebida ainda";
+
+  const umid = st.leitura ? st.leitura.umidade : null;
+  $("#valor").textContent = umid === null ? "--" : umid.toFixed(1);
+  if (umid === null) {
+    $("#situacao").textContent = "Aguardando a primeira leitura";
+  } else if (umid < cfg.umidade_min) {
+    $("#situacao").textContent = "Solo seco, precisa de água";
+  } else if (umid > cfg.umidade_max) {
+    $("#situacao").textContent = "Solo encharcado";
+  } else {
+    $("#situacao").textContent = "Solo na faixa ideal";
+  }
+  desenharPerfil(umid, cfg);
+
+  $("#previsao").textContent = horasParaTexto(st.previsao_horas);
+  $("#nIrr").textContent = st.irrigacoes_24h;
+  $("#litros").textContent = st.litros_24h.toFixed(1) + " L";
+  $("#ultIrr").textContent = st.ultima_irrigacao
+    ? `${hora(st.ultima_irrigacao.ts)}, ${duracaoCurta(st.ultima_irrigacao.duracao_s)}` : "--";
+
+  const auto = cfg.modo === "auto";
+  $("#mAuto").setAttribute("aria-pressed", auto);
+  $("#mManual").setAttribute("aria-pressed", !auto);
+
+  if (st.comando === "ligar") $("#avisoComando").textContent = "Comando enviado. A bomba liga na próxima leitura do sensor.";
+  else if (st.comando === "desligar") $("#avisoComando").textContent = "Pedido de parada enviado. Vale na próxima leitura do sensor.";
+  else if ($("#avisoComando").dataset.fixo !== "1") $("#avisoComando").textContent = "";
+
+  if (!configCarregada) preencherConfig(cfg);
+  return cfg;
+}
+
+async function atualizarGrafico(cfg) {
+  const dados = await api("/api/leituras?horas=24");
+  const rotulos = dados.map((d) => new Date(d.ts * 1000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+  const umid = dados.map((d) => d.umidade);
+  const minimo = dados.map(() => cfg.umidade_min);
+  const maximo = dados.map(() => cfg.umidade_max);
+  const estilo = getComputedStyle(document.documentElement);
+  const agua = estilo.getPropertyValue("--agua").trim();
+  const folha = estilo.getPropertyValue("--folha").trim();
+  const solo = estilo.getPropertyValue("--solo").trim();
+  const tinta = estilo.getPropertyValue("--tinta-suave").trim();
+  const linha = estilo.getPropertyValue("--linha").trim();
+
+  const conjuntos = [
+    { label: "Umidade (%)", data: umid, borderColor: agua, backgroundColor: agua, borderWidth: 2.5, pointRadius: 0, tension: .25 },
+    { label: "Mínimo", data: minimo, borderColor: solo, borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0 },
+    { label: "Máximo", data: maximo, borderColor: folha, borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0 },
+  ];
+
+  if (!grafico) {
+    grafico = new Chart($("#grafico"), {
+      type: "line",
+      data: { labels: rotulos, datasets: conjuntos },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          y: { min: 0, max: 100, ticks: { color: tinta }, grid: { color: linha } },
+          x: { ticks: { color: tinta, maxTicksLimit: 8 }, grid: { display: false } },
+        },
+        plugins: { legend: { labels: { color: tinta, boxWidth: 14 } } },
+      },
+    });
+  } else {
+    grafico.data.labels = rotulos;
+    grafico.data.datasets.forEach((d, i) => { d.data = conjuntos[i].data; });
+    grafico.update();
+  }
+}
+
+async function atualizarHistorico() {
+  const lista = await api("/api/irrigacoes");
+  const alvo = $("#historico");
+  if (!lista.length) { alvo.innerHTML = '<p class="vazio">Nenhuma irrigação registrada ainda.</p>'; return; }
+  const linhas = lista.map((i) => `
+    <tr>
+      <td>${hora(i.ts)}</td>
+      <td>${duracaoCurta(i.duracao_s)}</td>
+      <td>${i.origem === "manual" ? "Manual" : "Automática"}</td>
+      <td>${i.umidade_antes === null ? "--" : i.umidade_antes.toFixed(1) + "%"}</td>
+    </tr>`).join("");
+  alvo.innerHTML = `<table><thead><tr><th>Quando</th><th>Duração</th><th>Origem</th><th>Umidade antes</th></tr></thead><tbody>${linhas}</tbody></table>`;
+}
+
+async function ciclo() {
+  try {
+    const cfg = await atualizarStatus();
+    await Promise.all([atualizarGrafico(cfg), atualizarHistorico()]);
+  } catch (e) {
+    $("#ponto").classList.remove("on");
+    $("#estado").textContent = "Sem conexão com o servidor";
+  }
+}
+
+async function definirModo(modo) {
+  try { await post("/api/config", { modo }); await ciclo(); }
+  catch (e) { $("#avisoComando").textContent = e.message; }
+}
+$("#mAuto").addEventListener("click", () => definirModo("auto"));
+$("#mManual").addEventListener("click", () => definirModo("manual"));
+
+async function mandarComando(acao) {
+  try { await post("/api/comando", { acao }); await ciclo(); }
+  catch (e) { $("#avisoComando").textContent = e.message; }
+}
+$("#btnLigar").addEventListener("click", () => mandarComando("ligar"));
+$("#btnParar").addEventListener("click", () => mandarComando("desligar"));
+
+$("#formConfig").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const f = ev.target;
+  const aviso = $("#avisoConfig");
+  aviso.className = "aviso largo";
+  try {
+    await post("/api/config", {
+      umidade_min: f.umidade_min.value,
+      umidade_max: f.umidade_max.value,
+      duracao_s: f.duracao_s.value,
+      intervalo_min_s: Number(f.intervalo_min.value) * 60,
+      vazao_l_min: f.vazao_l_min.value,
+      raw_seco: f.raw_seco.value,
+      raw_molhado: f.raw_molhado.value,
+    });
+    aviso.textContent = "Configuração salva.";
+    await ciclo();
+  } catch (e) {
+    aviso.className = "aviso largo erro";
+    aviso.textContent = e.message;
+  }
+});
+
+ciclo();
+setInterval(ciclo, 5000);
+</script>
+</body>
+</html>
